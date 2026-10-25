@@ -17,4 +17,3 @@ Aplicación móvil en Android (Kotlin + Jetpack Compose) diseñada para gestiona
     * Uso de **Cámara** para adjuntar evidencia pedagógica (Planificaciones / Esquema de montaje).
     * **Notificaciones del Sistema** al enviar o aprobar solicitudes (Compatible con Android 13 Tiramisu).
     * **Vibración háptica (Vibrator)** para retroalimentación de éxito/error.
-* **Roles de Usuario:** Interfaz para Profesor (solicitante) y Administrador (aprobación/bloqueo de espacios).

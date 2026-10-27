@@ -1,13 +1,12 @@
 package com.example.colegio
 
 import android.app.Activity
+import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -15,144 +14,112 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.colegio.data.ReservaRepository
 import com.example.colegio.model.EstadoSolicitud
-import com.example.colegio.ui.theme.ColegioTheme
 import com.example.colegio.utils.RecursosNativosHelper
 import com.example.colegio.viewmodel.ReservaViewModel
 
 class AdminActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
-        val repository = ReservaRepository(applicationContext)
-        val viewModel = ReservaViewModel(repository)
-        setContent {
-            ColegioTheme {
-                PantallaAdmin(viewModel)
-            }
-        }
+        val vm = ReservaViewModel(ReservaRepository(applicationContext))
+        setContent { MaterialTheme { PantallaAdmin(vm) } }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PantallaAdmin(viewModel: ReservaViewModel) {
-    val context = LocalContext.current
-    val solicitudes = viewModel.obtenerSolicitudes()
-
+fun PantallaAdmin(vm: ReservaViewModel) {
+    val ctx = LocalContext.current
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Admin - Aprobar y Bloquear") },
-                navigationIcon = {
-                    TextButton(onClick = { (context as? Activity)?.finish() }) {
-                        Text("Volver")
-                    }
-                }
+                title = { Text("Panel Admin") },
+                navigationIcon = { TextButton(onClick = { (ctx as? Activity)?.finish() }) { Text("Salir") } }
             )
         }
-    ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            items(solicitudes, key = { it.id }) { solicitud ->
-                val colorTarjeta by animateColorAsState(
-                    targetValue = when (solicitud.estado) {
+    ) { pad ->
+        LazyColumn(Modifier.padding(pad).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+
+            item {
+                OutlinedButton(onClick = { ctx.startActivity(Intent(ctx, VerEspaciosActivity::class.java)) }, Modifier.fillMaxWidth()) {
+                    Text("Ver Matriz de Ocupación")
+                }
+                HorizontalDivider(Modifier.padding(vertical = 8.dp))
+            }
+
+            val pendientes = vm.adminsPendientes()
+            if (pendientes.isNotEmpty()) {
+                item {
+                    Text("⚠️ Admins por Aprobar (${pendientes.size})", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.titleMedium)
+                }
+                items(pendientes, key = { it.correo }) { admin ->
+                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer), modifier = Modifier.fillMaxWidth()) {
+                        Row(Modifier.padding(16.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Text(admin.correo)
+                            Button(onClick = {
+                                vm.aprobarAdmin(admin.correo)
+                                Toast.makeText(ctx, "Autorizado", Toast.LENGTH_SHORT).show()
+                            }) { Text("Autorizar") }
+                        }
+                    }
+                }
+                item { HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
+            }
+
+            item { Text("Solicitudes de Instalaciones", style = MaterialTheme.typography.titleMedium) }
+
+            items(vm.obtenerSolicitudes(), key = { it.id }) { s ->
+                val color by animateColorAsState(
+                    targetValue = when (s.estado) {
                         EstadoSolicitud.PENDIENTE -> MaterialTheme.colorScheme.surfaceVariant
                         EstadoSolicitud.APROBADA -> MaterialTheme.colorScheme.primaryContainer
-                        EstadoSolicitud.RECHAZADA -> MaterialTheme.colorScheme.errorContainer
+                        else -> MaterialTheme.colorScheme.errorContainer
                     },
-                    label = "animColorEstado"
+                    label = "animColor"
                 )
+                Card(colors = CardDefaults.cardColors(containerColor = color), modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text("${s.puesto.nombre} - ${s.modulo.rangoTexto}")
+                        Text("Profesor: ${s.nombreUsuario} | Actividad: ${s.motivoUso}")
+                        Text("📅 Fecha: ${s.fechaReserva}")
+                        if (s.esPrioritaria) Text("🚨 RESERVA PRIORITARIA", color = MaterialTheme.colorScheme.error)
+                        if (s.documentoAdjunto.isNotEmpty()) Text("📄 Documento: ${s.documentoAdjunto}")
 
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .animateContentSize(),
-                    colors = CardDefaults.cardColors(containerColor = colorTarjeta)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            text = "Solicitud #${solicitud.id} • ${solicitud.puesto.nombre}",
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        Text("Solicitante: ${solicitud.nombreUsuario}")
-                        Text("Curso / Taller: ${solicitud.motivoUso}")
-                        Text("Horario: ${solicitud.modulo.nombreBloque} (${solicitud.modulo.rangoTexto})")
-                        Text("Tipo: ${solicitud.modulo.tipo.descripcion}")
-
-                        if (solicitud.requiereFlexibilidad) {
-                            Text(
-                                text = "⚠️ Flexibilidad solicitada: ${solicitud.motivoFlexibilidad}",
-                                style = MaterialTheme.typography.bodyMedium
-                            )
+                        if (s.requiereFlexibilidad) {
+                            Text("⚠️ Flexibilidad: ${s.motivoFlexibilidad}")
                         }
 
-                        val foto = viewModel.obtenerFoto(solicitud.id)
-                        if (foto != null) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Image(
-                                bitmap = foto.asImageBitmap(),
-                                contentDescription = "Evidencia adjunta",
-                                modifier = Modifier.size(100.dp)
-                            )
+                        vm.obtenerFoto(s.id)?.let {
+                            Image(bitmap = it.asImageBitmap(), contentDescription = null, modifier = Modifier.size(100.dp))
                         }
 
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Estado: ${solicitud.estado}",
-                            style = MaterialTheme.typography.labelLarge
-                        )
+                        Text("Estado: ${s.estado}")
 
-                        if (solicitud.estado == EstadoSolicitud.PENDIENTE) {
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
+                        if (s.estado == EstadoSolicitud.PENDIENTE) {
+                            Row(Modifier.padding(top = 8.dp)) {
                                 Button(
                                     onClick = {
-                                        viewModel.aprobarSolicitud(solicitud.id)
-                                        RecursosNativosHelper.vibrarDispositivo(context, 150L)
-                                        RecursosNativosHelper.mostrarNotificacionReserva(
-                                            context = context,
-                                            titulo = "Reserva Aprobada y Bloqueada",
-                                            mensaje = "${solicitud.puesto.nombre} bloqueado en ${solicitud.modulo.rangoTexto} para ${solicitud.nombreUsuario}"
-                                        )
-                                        Toast.makeText(
-                                            context,
-                                            "Aprobada y guardada localmente",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
+                                        vm.aprobarSolicitud(s.id)
+                                        RecursosNativosHelper.mostrarNotificacionReserva(ctx, "Aprobada", "Bloqueado")
+                                        Toast.makeText(ctx, "Aprobada", Toast.LENGTH_SHORT).show()
                                     },
                                     modifier = Modifier.weight(1f)
                                 ) {
-                                    Text("Aceptar y Bloquear")
+                                    Text("Aprobar")
                                 }
+
+                                Spacer(Modifier.width(8.dp))
 
                                 OutlinedButton(
                                     onClick = {
-                                        viewModel.rechazarSolicitud(solicitud.id)
-                                        RecursosNativosHelper.vibrarDispositivo(context, 250L)
-                                        RecursosNativosHelper.mostrarNotificacionReserva(
-                                            context = context,
-                                            titulo = "Solicitud Rechazada",
-                                            mensaje = "Se rechazó la solicitud de ${solicitud.nombreUsuario}"
-                                        )
-                                        Toast.makeText(
-                                            context,
-                                            "Solicitud Rechazada",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
+                                        vm.rechazarSolicitud(s.id)
+                                        Toast.makeText(ctx, "Rechazada", Toast.LENGTH_SHORT).show()
                                     },
                                     modifier = Modifier.weight(1f)
                                 ) {

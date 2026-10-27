@@ -1,129 +1,69 @@
 package com.example.colegio
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import com.example.colegio.ui.theme.ColegioTheme
-import android.content.Intent
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-
+import com.example.colegio.data.ReservaRepository
+import com.example.colegio.ui.theme.ColegioTheme
+import com.example.colegio.viewmodel.LoginViewModel
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        val vm = LoginViewModel(ReservaRepository(applicationContext))
         setContent {
             ColegioTheme {
-                PantallaPrincipalEscuela()
+                PantallaLogin(vm, onLogin = { rol ->
+                    if (rol == "ADMIN") startActivity(Intent(this, AdminActivity::class.java))
+                    else startActivity(Intent(this, UsuarioActivity::class.java))
+                })
             }
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PantallaPrincipalEscuela() {
-    val context = LocalContext.current
+fun PantallaLogin(vm: LoginViewModel, onLogin: (String) -> Unit) {
+    Column(Modifier.fillMaxSize().padding(24.dp), Arrangement.Center, Alignment.CenterHorizontally) {
+        Text("Escuela Marcela Paz", style = MaterialTheme.typography.headlineMedium)
+        Spacer(Modifier.height(8.dp))
+        Text(if (vm.isRegister) "Registro" else "Iniciar Sesión", style = MaterialTheme.typography.titleMedium)
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Escuela Escritora Marcela Paz") },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            )
-        },
-        bottomBar = {
-            BottomAppBar(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant
-            ) {
-                Text(
-                    text = "Módulos 45 min • 08:15 a 15:30 Clases • 15:30 a 17:30 Talleres",
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp),
-                    textAlign = TextAlign.Center,
-                    style = MaterialTheme.typography.bodySmall
-                )
+        Spacer(Modifier.height(32.dp))
+        OutlinedTextField(value = vm.correo, onValueChange = { vm.onCorreo(it) }, label = { Text("Correo") }, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(16.dp))
+        OutlinedTextField(value = vm.contrasena, onValueChange = { vm.onPass(it) }, label = { Text("Contraseña") }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+
+        if (vm.isRegister) {
+            Spacer(Modifier.height(16.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                RadioButton(selected = vm.rol == "DOCENTE", onClick = { vm.onRol("DOCENTE") })
+                Text("Docente")
+                Spacer(Modifier.width(16.dp))
+                RadioButton(selected = vm.rol == "ADMIN", onClick = { vm.onRol("ADMIN") })
+                Text("Administrador")
             }
         }
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(24.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = "Sistema de Reserva de Canchas, Salas y Laboratorios",
-                style = MaterialTheme.typography.headlineSmall,
-                textAlign = TextAlign.Center
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "Selecciona el perfil con el que deseas operar:",
-                style = MaterialTheme.typography.bodyMedium
-            )
 
-            Spacer(modifier = Modifier.height(32.dp))
-
-            Button(
-                onClick = {
-                    context.startActivity(Intent(context, UsuarioActivity::class.java))
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-            ) {
-                Text("PERFIL USUARIO (Docentes / Talleres)")
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Button(
-                onClick = {
-                    context.startActivity(Intent(context, AdminActivity::class.java))
-                },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.secondary
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-            ) {
-                Text("PERFIL ADMINISTRADOR (Inspectoría / UTP)")
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-            HorizontalDivider()
-            Spacer(modifier = Modifier.height(24.dp))
-
-            OutlinedButton(
-                onClick = {
-                    context.startActivity(Intent(context, VerEspaciosActivity::class.java))
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-            ) {
-                Text("Ver Espacios en Uso y Disponibilidad")
-            }
+        if (vm.error != null) {
+            Spacer(Modifier.height(16.dp))
+            Text(vm.error!!, color = MaterialTheme.colorScheme.error)
         }
+
+        Spacer(Modifier.height(32.dp))
+        Button(onClick = {
+            if (vm.isRegister) vm.registrar() else vm.login()?.let { onLogin(it.rol) }
+        }, Modifier.fillMaxWidth().height(56.dp)) { Text(if (vm.isRegister) "Crear Cuenta" else "Entrar") }
+
+        Spacer(Modifier.height(16.dp))
+        TextButton(onClick = { vm.toggleMode() }) { Text(if (vm.isRegister) "¿Ya tienes cuenta? Inicia sesión" else "¿No tienes cuenta? Regístrate") }
     }
 }

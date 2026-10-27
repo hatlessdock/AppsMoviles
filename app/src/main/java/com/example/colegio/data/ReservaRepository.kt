@@ -5,105 +5,106 @@ import android.graphics.Bitmap
 import com.example.colegio.model.*
 
 class ReservaRepository(private val context: Context) {
+    init { BaseDatosSimulada.inicializarDatos(context) }
 
-    init {
-        BaseDatosSimulada.inicializarDatosLocales(context)
+
+    fun login(correo: String, pass: String): Usuario? =
+        BaseDatosSimulada.usuarios.find { it.correo == correo && it.contrasena == pass }
+
+    fun registrar(correo: String, pass: String, rol: String): String {
+        if (correo.isBlank() || pass.isBlank()) return "Llena todos los campos"
+        if (BaseDatosSimulada.usuarios.any { it.correo == correo }) return "El correo ya existe"
+        BaseDatosSimulada.usuarios.add(Usuario(correo.trim(), pass, rol, rol == "DOCENTE"))
+        BaseDatosSimulada.guardarUsuarios(context)
+        return "OK"
     }
 
-    fun obtenerPuestos(): List<Puesto> = BaseDatosSimulada.listaPuestos
+    fun getAdminsPendientes() = BaseDatosSimulada.usuarios.filter { it.rol == "ADMIN" && !it.aprobado }
 
-    fun obtenerModulos(): List<ModuloHorario> = BaseDatosSimulada.listaModulos
+    fun aprobarAdmin(correo: String) {
+        val i = BaseDatosSimulada.usuarios.indexOfFirst { it.correo == correo }
+        if (i != -1) {
+            BaseDatosSimulada.usuarios[i] = BaseDatosSimulada.usuarios[i].copy(aprobado = true)
+            BaseDatosSimulada.guardarUsuarios(context)
+        }
+    }
 
-    fun obtenerTodasLasSolicitudes(): List<SolicitudReserva> = BaseDatosSimulada.solicitudes
 
-    fun obtenerFoto(solicitudId: Int): Bitmap? = BaseDatosSimulada.fotosCapturadas[solicitudId]
+    fun obtenerPuestos() = BaseDatosSimulada.listaPuestos
+    fun obtenerModulos() = BaseDatosSimulada.listaModulos
+    fun obtenerSolicitudes() = BaseDatosSimulada.solicitudes
+    fun obtenerFoto(id: Int): Bitmap? = BaseDatosSimulada.fotosCapturadas[id]
+    fun obtenerFechasPosibles(esPrioritaria: Boolean) = BaseDatosSimulada.obtenerFechasPosibles(esPrioritaria)
 
-    fun obtenerEstadoPuestoEnModulo(puestoId: Int, moduloId: Int): EstadoPuesto {
-        val reservaAprobada = BaseDatosSimulada.solicitudes.find {
+    fun estadoPuesto(puestoId: Int, moduloId: Int, fecha: String = ""): EstadoPuesto {
+        val aprobada = BaseDatosSimulada.solicitudes.find {
             it.puesto.id == puestoId &&
                     it.modulo.id == moduloId &&
-                    it.estado == EstadoSolicitud.APROBADA
+                    it.estado == EstadoSolicitud.APROBADA &&
+                    (fecha.isEmpty() || it.fechaReserva == fecha)
         }
-
-        return if (reservaAprobada != null) {
-            val flexInfo = if (reservaAprobada.requiereFlexibilidad) {
-                "Flexibilidad: ${reservaAprobada.motivoFlexibilidad}"
-            } else ""
-            EstadoPuesto.EnUso(
-                ocupadoPor = reservaAprobada.nombreUsuario,
-                actividad = reservaAprobada.motivoUso,
-                detalleFlexibilidad = flexInfo
-            )
+        return if (aprobada != null) {
+            EstadoPuesto.EnUso(aprobada.nombreUsuario, aprobada.motivoUso, aprobada.motivoFlexibilidad)
         } else {
             EstadoPuesto.Disponible
         }
     }
 
     fun crearSolicitud(
-        nombreUsuario: String,
-        motivoUso: String,
+        nombre: String,
+        motivo: String,
         puesto: Puesto,
         modulo: ModuloHorario,
-        requiereFlexibilidad: Boolean,
-        motivoFlexibilidad: String,
-        fotoBitmap: Bitmap?
+        fecha: String,
+        reqFlex: Boolean,
+        motFlex: String,
+        esPrioritaria: Boolean,
+        foto: Bitmap?,
+        documento: String
     ): Boolean {
-        val estadoActual = obtenerEstadoPuestoEnModulo(puesto.id, modulo.id)
-        if (estadoActual is EstadoPuesto.EnUso) {
-            return false
-        }
-
-        val nuevoId = BaseDatosSimulada.generarNuevoId()
-        if (fotoBitmap != null) {
-            BaseDatosSimulada.fotosCapturadas[nuevoId] = fotoBitmap
-        }
-
-        val nueva = SolicitudReserva(
-            id = nuevoId,
-            nombreUsuario = nombreUsuario.trim(),
-            motivoUso = motivoUso.trim(),
-            puesto = puesto,
-            modulo = modulo,
-            requiereFlexibilidad = requiereFlexibilidad,
-            motivoFlexibilidad = if (requiereFlexibilidad) motivoFlexibilidad.trim() else "",
-            tieneFotoAdjunta = fotoBitmap != null,
-            estado = EstadoSolicitud.PENDIENTE
+        if (estadoPuesto(puesto.id, modulo.id, fecha) is EstadoPuesto.EnUso) return false
+        val id = BaseDatosSimulada.generarId()
+        if (foto != null) BaseDatosSimulada.fotosCapturadas[id] = foto
+        BaseDatosSimulada.solicitudes.add(
+            SolicitudReserva(
+                id = id,
+                nombreUsuario = nombre,
+                motivoUso = motivo,
+                puesto = puesto,
+                modulo = modulo,
+                requiereFlexibilidad = reqFlex,
+                motivoFlexibilidad = motFlex,
+                tieneFotoAdjunta = foto != null,
+                estado = EstadoSolicitud.PENDIENTE,
+                fechaReserva = fecha,
+                esPrioritaria = esPrioritaria,
+                documentoAdjunto = documento
+            )
         )
-        BaseDatosSimulada.solicitudes.add(nueva)
-        BaseDatosSimulada.guardarEnAlmacenamientoLocal(context)
+        BaseDatosSimulada.guardar(context)
         return true
     }
 
-    fun aprobarSolicitud(solicitudId: Int) {
-        val index = BaseDatosSimulada.solicitudes.indexOfFirst { it.id == solicitudId }
-        if (index != -1) {
-            val aprobada = BaseDatosSimulada.solicitudes[index]
-            BaseDatosSimulada.solicitudes[index] = aprobada.copy(
-                estado = EstadoSolicitud.APROBADA
-            )
-
-            for (i in BaseDatosSimulada.solicitudes.indices) {
-                val s = BaseDatosSimulada.solicitudes[i]
-                if (s.id != solicitudId &&
-                    s.puesto.id == aprobada.puesto.id &&
-                    s.modulo.id == aprobada.modulo.id &&
-                    s.estado == EstadoSolicitud.PENDIENTE
-                ) {
-                    BaseDatosSimulada.solicitudes[i] = s.copy(estado = EstadoSolicitud.RECHAZADA)
+    fun aprobarSolicitud(id: Int) {
+        val i = BaseDatosSimulada.solicitudes.indexOfFirst { it.id == id }
+        if (i != -1) {
+            val sol = BaseDatosSimulada.solicitudes[i]
+            BaseDatosSimulada.solicitudes[i] = sol.copy(estado = EstadoSolicitud.APROBADA)
+            for (j in BaseDatosSimulada.solicitudes.indices) {
+                val s = BaseDatosSimulada.solicitudes[j]
+                if (s.id != id && s.puesto.id == sol.puesto.id && s.modulo.id == sol.modulo.id && s.fechaReserva == sol.fechaReserva && s.estado == EstadoSolicitud.PENDIENTE) {
+                    BaseDatosSimulada.solicitudes[j] = s.copy(estado = EstadoSolicitud.RECHAZADA)
                 }
             }
-            BaseDatosSimulada.guardarEnAlmacenamientoLocal(context)
+            BaseDatosSimulada.guardar(context)
         }
     }
 
-    fun rechazarSolicitud(solicitudId: Int) {
-        val index = BaseDatosSimulada.solicitudes.indexOfFirst { it.id == solicitudId }
-        if (index != -1) {
-            val actual = BaseDatosSimulada.solicitudes[index]
-            BaseDatosSimulada.solicitudes[index] = actual.copy(
-                estado = EstadoSolicitud.RECHAZADA
-            )
-            BaseDatosSimulada.guardarEnAlmacenamientoLocal(context)
+    fun rechazarSolicitud(id: Int) {
+        val i = BaseDatosSimulada.solicitudes.indexOfFirst { it.id == id }
+        if (i != -1) {
+            BaseDatosSimulada.solicitudes[i] = BaseDatosSimulada.solicitudes[i].copy(estado = EstadoSolicitud.RECHAZADA)
+            BaseDatosSimulada.guardar(context)
         }
     }
 }

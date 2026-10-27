@@ -6,8 +6,11 @@ data class SolicitudReserva(
     val motivoUso: String,
     val puesto: Puesto,
     val modulo: ModuloHorario,
-    val requiereFlexibilidad: Boolean = false,
-    val motivoFlexibilidad: String = "",
-    val tieneFotoAdjunta: Boolean = false,
-    var estado: EstadoSolicitud = EstadoSolicitud.PENDIENTE
+    val requiereFlexibilidad: Boolean,
+    val motivoFlexibilidad: String,
+    val tieneFotoAdjunta: Boolean,
+    val estado: EstadoSolicitud,
+    val fechaReserva: String = "Mañana (Día Hábil)",
+    val esPrioritaria: Boolean = false,
+    val documentoAdjunto: String = ""
 )

@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Create
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Warning
@@ -58,13 +59,16 @@ fun PantallaUsuario(viewModel: ReservaViewModel) {
     val context = LocalContext.current
     val puestos = viewModel.obtenerPuestos()
     val modulos = viewModel.obtenerModulos()
+    val fechasDisponibles = viewModel.obtenerFechasDisponibles()
 
     var menuPuestoAbierto by remember { mutableStateOf(false) }
     var menuModuloAbierto by remember { mutableStateOf(false) }
-    var menuEvidenciaAbierto by remember { mutableStateOf(false) } // NUEVO
+    var menuFechaAbierto by remember { mutableStateOf(false) }
+    var menuEvidenciaAbierto by remember { mutableStateOf(false) }
 
     val puestoSeleccionado = puestos[viewModel.puestoIndex]
     val moduloSeleccionado = modulos[viewModel.moduloIndex]
+    val fechaSeleccionada = fechasDisponibles.getOrElse(viewModel.fechaIndex) { fechasDisponibles.first() }
     val estadoPuesto = viewModel.obtenerEstadoEnModulo(puestoSeleccionado.id, moduloSeleccionado.id)
 
     val launcherCamara = rememberLauncherForActivityResult(
@@ -73,6 +77,16 @@ fun PantallaUsuario(viewModel: ReservaViewModel) {
         if (bitmap != null) {
             viewModel.onFotoCapturada(bitmap)
             Toast.makeText(context, "Foto adjuntada correctamente", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val launcherArchivo = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            val nombre = uri.lastPathSegment?.substringAfterLast("/") ?: "documento_respaldo.pdf"
+            viewModel.onDocumentoSeleccionado(nombre)
+            Toast.makeText(context, "Archivo adjuntado: $nombre", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -116,6 +130,19 @@ fun PantallaUsuario(viewModel: ReservaViewModel) {
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "⏰ Regla Escolar: Las reservas deben realizarse hasta las 23:59 hrs del día anterior. Si necesitas un espacio para HOY por una emergencia, activa la 'Reserva Prioritaria'.",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(12.dp)
+                    )
+                }
+            }
+
+            item {
                 OutlinedTextField(
                     value = viewModel.nombreUsuario,
                     onValueChange = { viewModel.onNombreChange(it) },
@@ -126,7 +153,7 @@ fun PantallaUsuario(viewModel: ReservaViewModel) {
                         else if (viewModel.nombreUsuario.length >= 3) Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                     },
                     isError = viewModel.errorNombre != null,
-                    supportingText = { Text(viewModel.errorNombre ?: "Campo obligatorio (mínimo 3 letras)", color = if (viewModel.errorNombre != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant) },
+                    supportingText = { Text(viewModel.errorNombre ?: "Campo obligatorio (mínimo 3 letras)") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
@@ -143,14 +170,72 @@ fun PantallaUsuario(viewModel: ReservaViewModel) {
                         else if (viewModel.motivoUso.length >= 5) Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                     },
                     isError = viewModel.errorMotivoUso != null,
-                    supportingText = { Text(viewModel.errorMotivoUso ?: "Indica el curso y asignatura", color = if (viewModel.errorMotivoUso != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant) },
+                    supportingText = { Text(viewModel.errorMotivoUso ?: "Indica el curso y asignatura") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
             }
 
             item {
-                Text("1. Espacio de la Escuela:", style = MaterialTheme.typography.titleSmall)
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (viewModel.esPrioritaria) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surface
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(
+                                checked = viewModel.esPrioritaria,
+                                onCheckedChange = { viewModel.onPrioritariaCheckChange(it) }
+                            )
+                            Text(
+                                text = "🚨 Reserva Prioritaria / Urgencia (Excepción para HOY)",
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                        }
+
+                        AnimatedVisibility(visible = viewModel.esPrioritaria) {
+                            Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                                OutlinedTextField(
+                                    value = viewModel.motivoPrioridad,
+                                    onValueChange = { viewModel.onMotivoPrioridadChange(it) },
+                                    label = { Text("Motivo de la Urgencia / Excepción") },
+                                    leadingIcon = { Icon(Icons.Default.Warning, contentDescription = null) },
+                                    isError = viewModel.errorPrioridad != null,
+                                    supportingText = { Text(viewModel.errorPrioridad ?: "Obligatorio: Explica qué imprevisto ocurrió y adjunta foto o documento abajo") },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            item {
+                Text("1. Fecha de Reserva (Solo días hábiles posibles):", style = MaterialTheme.typography.titleSmall)
+                Box {
+                    OutlinedButton(onClick = { menuFechaAbierto = true }, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Default.DateRange, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(fechaSeleccionada)
+                    }
+                    DropdownMenu(expanded = menuFechaAbierto, onDismissRequest = { menuFechaAbierto = false }) {
+                        fechasDisponibles.forEachIndexed { index, fecha ->
+                            DropdownMenuItem(
+                                text = { Text(fecha) },
+                                onClick = {
+                                    viewModel.onFechaSelected(index)
+                                    menuFechaAbierto = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            item {
+                Text("2. Espacio de la Escuela:", style = MaterialTheme.typography.titleSmall)
                 Box {
                     OutlinedButton(onClick = { menuPuestoAbierto = true }, modifier = Modifier.fillMaxWidth()) {
                         Text("${puestoSeleccionado.nombre} (${puestoSeleccionado.categoria})")
@@ -167,7 +252,7 @@ fun PantallaUsuario(viewModel: ReservaViewModel) {
             }
 
             item {
-                Text("2. Módulo Horario (45 min):", style = MaterialTheme.typography.titleSmall)
+                Text("3. Módulo Horario (45 min):", style = MaterialTheme.typography.titleSmall)
                 Box {
                     OutlinedButton(onClick = { menuModuloAbierto = true }, modifier = Modifier.fillMaxWidth()) {
                         Text("${moduloSeleccionado.nombreBloque}: ${moduloSeleccionado.rangoTexto}")
@@ -192,7 +277,7 @@ fun PantallaUsuario(viewModel: ReservaViewModel) {
                 )
                 Card(colors = CardDefaults.cardColors(containerColor = colorEstado), modifier = Modifier.fillMaxWidth().animateContentSize()) {
                     if (estadoPuesto is EstadoPuesto.Disponible) {
-                        Text("✅ Espacio DISPONIBLE en este módulo.", modifier = Modifier.padding(12.dp))
+                        Text("✅ Espacio DISPONIBLE para el $fechaSeleccionada.", modifier = Modifier.padding(12.dp))
                     } else if (estadoPuesto is EstadoPuesto.EnUso) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             Text("⛔ HORARIO BLOQUEADO", color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.titleSmall)
@@ -210,39 +295,39 @@ fun PantallaUsuario(viewModel: ReservaViewModel) {
                     }
 
                     AnimatedVisibility(visible = viewModel.requiereFlexibilidad) {
-                        Column {
-                            OutlinedTextField(
-                                value = viewModel.motivoFlexibilidad,
-                                onValueChange = { viewModel.onMotivoFlexibilidadChange(it) },
-                                label = { Text("Justificar Flexibilidad") },
-                                leadingIcon = { Icon(Icons.Default.Info, contentDescription = null) },
-                                isError = viewModel.errorFlexibilidad != null,
-                                supportingText = { Text(viewModel.errorFlexibilidad ?: "Detalla por qué necesitas flexibilidad", color = if (viewModel.errorFlexibilidad != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant) },
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
-                            Spacer(modifier = Modifier.height(8.dp))
-
-                            Text("Tipo de Evidencia Fotográfica (Para validar anticipación 24h):", style = MaterialTheme.typography.labelMedium)
-                            Box {
-                                OutlinedButton(onClick = { menuEvidenciaAbierto = true }, modifier = Modifier.fillMaxWidth()) {
-                                    Text(viewModel.opcionesEvidencia[viewModel.tipoEvidenciaIndex])
-                                }
-                                DropdownMenu(expanded = menuEvidenciaAbierto, onDismissRequest = { menuEvidenciaAbierto = false }) {
-                                    viewModel.opcionesEvidencia.forEachIndexed { index, opcion ->
-                                        DropdownMenuItem(
-                                            text = { Text(opcion) },
-                                            onClick = { viewModel.onTipoEvidenciaSelected(index); menuEvidenciaAbierto = false }
-                                        )
-                                    }
-                                }
-                            }
-                        }
+                        OutlinedTextField(
+                            value = viewModel.motivoFlexibilidad,
+                            onValueChange = { viewModel.onMotivoFlexibilidadChange(it) },
+                            label = { Text("Justificar Flexibilidad") },
+                            leadingIcon = { Icon(Icons.Default.Info, contentDescription = null) },
+                            isError = viewModel.errorFlexibilidad != null,
+                            supportingText = { Text(viewModel.errorFlexibilidad ?: "Detalla cómo necesitas el espacio") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
                 }
             }
 
             item {
+                AnimatedVisibility(visible = viewModel.requiereFlexibilidad || viewModel.esPrioritaria) {
+                    Column(modifier = Modifier.padding(bottom = 8.dp)) {
+                        Text("Tipo de Respaldo / Documentación:", style = MaterialTheme.typography.labelMedium)
+                        Box {
+                            OutlinedButton(onClick = { menuEvidenciaAbierto = true }, modifier = Modifier.fillMaxWidth()) {
+                                Text(viewModel.opcionesEvidencia[viewModel.tipoEvidenciaIndex])
+                            }
+                            DropdownMenu(expanded = menuEvidenciaAbierto, onDismissRequest = { menuEvidenciaAbierto = false }) {
+                                viewModel.opcionesEvidencia.forEachIndexed { index, opcion ->
+                                    DropdownMenuItem(
+                                        text = { Text(opcion) },
+                                        onClick = { viewModel.onTipoEvidenciaSelected(index); menuEvidenciaAbierto = false }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
                 if (viewModel.errorFotoObligatoria != null) {
                     Text(
                         text = viewModel.errorFotoObligatoria!!,
@@ -252,22 +337,37 @@ fun PantallaUsuario(viewModel: ReservaViewModel) {
                     )
                 }
 
-                OutlinedButton(
-                    onClick = {
-                        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
-                            launcherCamara.launch(null)
-                        } else {
-                            launcherPermisoCamara.launch(Manifest.permission.CAMERA)
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        containerColor = if (viewModel.errorFotoObligatoria != null) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surface
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = {
+                            if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                                launcherCamara.launch(null)
+                            } else {
+                                launcherPermisoCamara.launch(Manifest.permission.CAMERA)
+                            }
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.Build, contentDescription = null)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(if (viewModel.fotoCapturada == null) "📷 Foto" else "📷 Cambiar")
+                    }
+
+                    OutlinedButton(
+                        onClick = { launcherArchivo.launch("*/*") },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(if (viewModel.documentoAdjunto.isEmpty()) "📄 Subir Archivo" else "📄 Cambiar Doc")
+                    }
+                }
+
+                if (viewModel.documentoAdjunto.isNotEmpty()) {
+                    Text(
+                        text = "📄 Documento adjunto: ${viewModel.documentoAdjunto}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 4.dp)
                     )
-                ) {
-                    Icon(Icons.Default.Build, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(if (viewModel.fotoCapturada == null) "Tomar Foto de Evidencia" else "Cambiar Foto de Evidencia")
                 }
 
                 AnimatedVisibility(visible = viewModel.fotoCapturada != null) {
@@ -295,7 +395,7 @@ fun PantallaUsuario(viewModel: ReservaViewModel) {
                     enabled = estadoPuesto is EstadoPuesto.Disponible,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Enviar Solicitud de Reserva")
+                    Text(if (viewModel.esPrioritaria) "Enviar Reserva Prioritaria (Urgente)" else "Enviar Solicitud de Reserva")
                 }
             }
 
@@ -307,9 +407,14 @@ fun PantallaUsuario(viewModel: ReservaViewModel) {
             items(misSolicitudes, key = { it.id }) { sol ->
                 Card(modifier = Modifier.fillMaxWidth().animateContentSize()) {
                     Column(modifier = Modifier.padding(12.dp)) {
+                        if (sol.esPrioritaria) {
+                            Text("🚨 PRIORITARIA / EXCEPCIÓN", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelLarge)
+                        }
                         Text("${sol.puesto.nombre} • ${sol.modulo.rangoTexto}", style = MaterialTheme.typography.titleSmall)
+                        Text("📅 Fecha: ${sol.fechaReserva}")
                         Text("Actividad: ${sol.motivoUso}")
                         if (sol.tieneFotoAdjunta) Text("📷 Incluye fotografía")
+                        if (sol.documentoAdjunto.isNotEmpty()) Text("📄 Archivo: ${sol.documentoAdjunto}")
                         Text("Estado: ${sol.estado}", style = MaterialTheme.typography.labelLarge)
                     }
                 }

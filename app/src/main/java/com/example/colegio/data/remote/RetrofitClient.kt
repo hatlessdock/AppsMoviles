@@ -7,7 +7,7 @@ object RetrofitClient {
 
     // 10.0.2.2 apunta al localhost de tu PC desde el emulador Android.
     // Si subes el Spring Boot a la nube (ej. Render), reemplaza esta URL por tu link HTTPS.
-    private const val BASE_URL_SPRING = "http://10.0.2.2:8080/"
+    private const val BASE_URL_SPRING = "https://appsmoviles.onrender.com/"
 
     // API externa pública de feriados legales de Chile
     private const val BASE_URL_FERIADOS = "https://date.nager.at/"

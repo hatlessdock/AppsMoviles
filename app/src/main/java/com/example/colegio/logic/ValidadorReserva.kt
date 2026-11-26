@@ -42,7 +42,7 @@ object ValidadorReserva {
     ): Boolean {
         val esFinDeSemana = diaSemanaCalendar == Calendar.SATURDAY ||
                 diaSemanaCalendar == Calendar.SUNDAY
-        val esFeriado = feriadosChile.contains(fechaIso)
+        val esFeriado = feriadosChile.contains(fechaIso.trim())
         return !esFinDeSemana && !esFeriado
     }
 
@@ -56,8 +56,9 @@ object ValidadorReserva {
         fechaReserva: String,
         reservasAprobadas: List<Triple<Int, Int, String>>
     ): Boolean {
+        val fechaLimpia = fechaReserva.trim()
         return reservasAprobadas.any { (pId, mId, fecha) ->
-            pId == puestoId && mId == moduloId && fecha == fechaReserva
+            pId == puestoId && mId == moduloId && fecha.trim() == fechaLimpia
         }
     }
 }

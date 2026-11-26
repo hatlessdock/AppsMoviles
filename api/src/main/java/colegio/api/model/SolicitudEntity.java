@@ -10,15 +10,23 @@ public class SolicitudEntity {
     private Integer id;
 
     private String nombreUsuario;
+
+    @Column(columnDefinition = "TEXT")
     private String motivoUso;
+
     private int puestoId;
     private int moduloId;
     private boolean requiereFlexibilidad;
+
+    @Column(columnDefinition = "TEXT")
     private String motivoFlexibilidad;
+
     private boolean tieneFotoAdjunta;
     private String estado;
     private String fechaReserva;
     private boolean esPrioritaria;
+
+    @Column(columnDefinition = "TEXT")
     private String documentoAdjunto;
 
     public SolicitudEntity() {}

@@ -22,15 +22,10 @@ class ReservaRepository(private val context: Context) {
         sincronizarTodo()
     }
 
-    /**
-     * Descarga feriados de Chile (API externa) y sincroniza usuarios/solicitudes
-     * desde Spring Boot. Si no hay conexión, mantiene los datos locales de SQLite.
-     */
     fun sincronizarTodo() {
         scopeRed.launch {
-            // 1. Consumo de API Externa: Feriados de Chile
             try {
-                val anioActual = Calendar.getInstance().get(Calendar.YEAR)
+                val anioActual = ColegioCacheLocal.calendarioChile().get(Calendar.YEAR)
                 val feriados = RetrofitClient.feriadosApi.obtenerFeriadosChile(anioActual)
                 ColegioCacheLocal.feriadosChile = feriados.map { it.date }.toSet()
                 Log.d("API_EXTERNA", "Feriados cargados: ${feriados.size}")
@@ -38,7 +33,6 @@ class ReservaRepository(private val context: Context) {
                 Log.w("API_EXTERNA", "Sin conexión a API de feriados, usando solo fin de semana: ${e.message}")
             }
 
-            // 2. Conexión con Microservicio propio en Spring Boot (Usuarios)
             try {
                 val remotos = RetrofitClient.colegioApi.listarUsuarios()
                 if (remotos.isNotEmpty()) {
@@ -49,7 +43,6 @@ class ReservaRepository(private val context: Context) {
                     }
                     ColegioCacheLocal.guardarUsuarios(context)
                 } else {
-                    // Si la BD remota está vacía la primera vez, sube los usuarios iniciales
                     ColegioCacheLocal.usuarios.toList().forEach { u ->
                         RetrofitClient.colegioApi.crearUsuario(
                             UsuarioDto(u.correo, u.contrasena, u.rol, u.aprobado)
@@ -60,7 +53,6 @@ class ReservaRepository(private val context: Context) {
                 Log.w("API_SPRING", "Modo offline SQLite para usuarios: ${e.message}")
             }
 
-            // 3. Conexión con Microservicio propio en Spring Boot (Solicitudes)
             try {
                 val remotas = RetrofitClient.colegioApi.listarSolicitudes()
                 if (remotas.isNotEmpty()) {
@@ -78,7 +70,7 @@ class ReservaRepository(private val context: Context) {
                             tieneFotoAdjunta = dto.tieneFotoAdjunta,
                             estado = runCatching { EstadoSolicitud.valueOf(dto.estado) }
                                 .getOrDefault(EstadoSolicitud.PENDIENTE),
-                            fechaReserva = dto.fechaReserva,
+                            fechaReserva = ColegioCacheLocal.limpiarFechaBase(dto.fechaReserva),
                             esPrioritaria = dto.esPrioritaria,
                             documentoAdjunto = dto.documentoAdjunto
                         )
@@ -106,7 +98,6 @@ class ReservaRepository(private val context: Context) {
         ColegioCacheLocal.usuarios.add(nuevo)
         ColegioCacheLocal.guardarUsuarios(context)
 
-        // Envía a Spring Boot en segundo plano (si no hay red, ya quedó guardado en SQLite)
         scopeRed.launch {
             try {
                 RetrofitClient.colegioApi.crearUsuario(
@@ -144,11 +135,12 @@ class ReservaRepository(private val context: Context) {
     fun obtenerFechasPosibles(esPrioritaria: Boolean) = ColegioCacheLocal.obtenerFechasPosibles(esPrioritaria)
 
     fun estadoPuesto(puestoId: Int, moduloId: Int, fecha: String = ""): EstadoPuesto {
+        val fechaLimpia = ColegioCacheLocal.limpiarFechaBase(fecha)
         val aprobada = ColegioCacheLocal.solicitudes.find {
             it.puesto.id == puestoId &&
                     it.modulo.id == moduloId &&
                     it.estado == EstadoSolicitud.APROBADA &&
-                    (fecha.isEmpty() || it.fechaReserva == fecha)
+                    (fechaLimpia.isEmpty() || ColegioCacheLocal.limpiarFechaBase(it.fechaReserva) == fechaLimpia)
         }
         return if (aprobada != null) {
             EstadoPuesto.EnUso(aprobada.nombreUsuario, aprobada.motivoUso, aprobada.motivoFlexibilidad)
@@ -169,7 +161,8 @@ class ReservaRepository(private val context: Context) {
         foto: Bitmap?,
         documento: String
     ): Boolean {
-        if (estadoPuesto(puesto.id, modulo.id, fecha) is EstadoPuesto.EnUso) return false
+        val fechaLimpia = ColegioCacheLocal.limpiarFechaBase(fecha)
+        if (estadoPuesto(puesto.id, modulo.id, fechaLimpia) is EstadoPuesto.EnUso) return false
         val idLocal = ColegioCacheLocal.generarId()
         if (foto != null) ColegioCacheLocal.fotosCapturadas[idLocal] = foto
 
@@ -183,14 +176,13 @@ class ReservaRepository(private val context: Context) {
             motivoFlexibilidad = motFlex,
             tieneFotoAdjunta = foto != null,
             estado = EstadoSolicitud.PENDIENTE,
-            fechaReserva = fecha,
+            fechaReserva = fechaLimpia,
             esPrioritaria = esPrioritaria,
             documentoAdjunto = documento
         )
         ColegioCacheLocal.solicitudes.add(nueva)
         ColegioCacheLocal.guardar(context)
 
-        // Envía a Spring Boot y sincroniza el ID real de la BD
         scopeRed.launch {
             try {
                 val guardadaRemota = RetrofitClient.colegioApi.crearSolicitud(

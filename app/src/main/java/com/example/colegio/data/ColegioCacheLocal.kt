@@ -8,15 +8,17 @@ import com.example.colegio.model.*
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import java.util.TimeZone
 
 object ColegioCacheLocal {
     private var inicializado = false
+    val ZONA_CHILE: TimeZone = TimeZone.getTimeZone("America/Santiago")
+    private val LOCALE_CL = Locale("es", "CL")
 
     val fotosCapturadas = mutableStateMapOf<Int, Bitmap>()
     val solicitudes = mutableStateListOf<SolicitudReserva>()
     val usuarios = mutableStateListOf<Usuario>()
 
-    // Se llenará desde la API externa de feriados vía Retrofit (formato yyyy-MM-dd)
     var feriadosChile: Set<String> = emptySet()
 
     private var contadorId = 1
@@ -46,18 +48,89 @@ object ColegioCacheLocal {
         ModuloHorario(11, "Taller Cierre", "16:45", "17:30", TipoActividad.TALLER)
     )
 
+    fun calendarioChile(): Calendar = Calendar.getInstance(ZONA_CHILE, LOCALE_CL)
+
+    private fun formatoFechaChile(): SimpleDateFormat =
+        SimpleDateFormat("EEEE dd/MM/yyyy", LOCALE_CL).apply { timeZone = ZONA_CHILE }
+
+    fun obtenerFechaHoraActualTexto(): String {
+        val fmt = SimpleDateFormat("EEEE dd/MM/yyyy • HH:mm 'hrs'", LOCALE_CL).apply {
+            timeZone = ZONA_CHILE
+        }
+        return fmt.format(calendarioChile().time).replaceFirstChar { it.uppercase() }
+    }
+
+    /**
+     * Devuelve la fecha limpia (ej. "Viernes 27/11/2026") para guardar en BD sin etiquetas relativas congeladas.
+     */
+    fun limpiarFechaBase(fechaTexto: String): String {
+        return fechaTexto
+            .removePrefix("HOY (Excepción Prioritaria) - ")
+            .removePrefix("HOY - ")
+            .removePrefix("Mañana - ")
+            .trim()
+    }
+
+    /**
+     * Calcula dinámicamente si una fecha guardada corresponde a HOY o MAÑANA según la fecha real de Chile.
+     */
+    fun formatearFechaDinamica(fechaGuardada: String): String {
+        val limpia = limpiarFechaBase(fechaGuardada)
+        val fmt = formatoFechaChile()
+        val cal = calendarioChile()
+
+        val hoyTexto = fmt.format(cal.time).replaceFirstChar { it.uppercase() }
+        if (limpia.equals(hoyTexto, ignoreCase = true)) {
+            return "HOY • $limpia"
+        }
+
+        cal.add(Calendar.DAY_OF_YEAR, 1)
+        val mananaTexto = fmt.format(cal.time).replaceFirstChar { it.uppercase() }
+        if (limpia.equals(mananaTexto, ignoreCase = true)) {
+            return "Mañana • $limpia"
+        }
+
+        return limpia
+    }
+
+    /**
+     * Verifica si la fecha seleccionada es HOY en Chile y si la hora de término del módulo (ej. "09:00") ya pasó.
+     */
+    fun moduloYaPasoHoy(fechaSeleccionada: String, horaFin: String): Boolean {
+        val limpia = limpiarFechaBase(fechaSeleccionada)
+        val fmt = formatoFechaChile()
+        val ahora = calendarioChile()
+        val hoyTexto = fmt.format(ahora.time).replaceFirstChar { it.uppercase() }
+
+        if (!limpia.equals(hoyTexto, ignoreCase = true)) return false
+
+        val partes = horaFin.split(":")
+        if (partes.size != 2) return false
+        val horaModulo = partes[0].toIntOrNull() ?: return false
+        val minModulo = partes[1].toIntOrNull() ?: return false
+
+        val horaActual = ahora.get(Calendar.HOUR_OF_DAY)
+        val minActual = ahora.get(Calendar.MINUTE)
+
+        return (horaActual > horaModulo) || (horaActual == horaModulo && minActual >= minModulo)
+    }
+
+    /**
+     * Genera las fechas hábiles reales en Chile (sin feriados ni fines de semana).
+     * Retorna fechas limpias (ej. "Viernes 27/11/2026").
+     */
     fun obtenerFechasPosibles(
         incluirHoyPorUrgencia: Boolean,
         feriados: Set<String> = feriadosChile
     ): List<String> {
-        val formato = SimpleDateFormat("EEEE dd/MM/yyyy", Locale("es", "CL"))
-        val formatoIso = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-        val calendario = Calendar.getInstance()
+        val formato = formatoFechaChile()
+        val formatoIso = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = ZONA_CHILE }
+        val calendario = calendarioChile()
         val fechas = mutableListOf<String>()
 
         if (incluirHoyPorUrgencia) {
             val textoHoy = formato.format(calendario.time).replaceFirstChar { it.uppercase() }
-            fechas.add("HOY (Excepción Prioritaria) - $textoHoy")
+            fechas.add(textoHoy)
         }
 
         var diasAgregados = 0
@@ -73,11 +146,7 @@ object ColegioCacheLocal {
 
             if (!esFinDeSemana && !esFeriado) {
                 val textoFecha = formato.format(calendario.time).replaceFirstChar { it.uppercase() }
-                if (diasAgregados == 0) {
-                    fechas.add("Mañana - $textoFecha")
-                } else {
-                    fechas.add(textoFecha)
-                }
+                fechas.add(textoFecha)
                 diasAgregados++
             }
         }

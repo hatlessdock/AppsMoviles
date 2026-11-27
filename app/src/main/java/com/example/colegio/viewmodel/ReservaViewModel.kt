@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
+import com.example.colegio.data.ColegioCacheLocal
 import com.example.colegio.data.ReservaRepository
 import com.example.colegio.model.EstadoPuesto
 
@@ -114,6 +115,13 @@ class ReservaViewModel(private val repository: ReservaRepository) : ViewModel() 
         }
     }
 
+    fun moduloYaPasoHoy(mId: Int): Boolean {
+        val fechas = obtenerFechasDisponibles()
+        val fechaActual = fechas.getOrElse(fechaIndex) { fechas.first() }
+        val modulo = obtenerModulos().find { it.id == mId } ?: return false
+        return ColegioCacheLocal.moduloYaPasoHoy(fechaActual, modulo.horaFin)
+    }
+
     fun enviarSolicitud(): Boolean {
         onNombreChange(nombreUsuario)
         onMotivoUsoChange(motivoUso)
@@ -127,6 +135,11 @@ class ReservaViewModel(private val repository: ReservaRepository) : ViewModel() 
 
         val fechas = obtenerFechasDisponibles()
         val fechaSeleccionada = fechas.getOrElse(fechaIndex) { fechas.first() }
+        val moduloElegido = obtenerModulos()[moduloIndex]
+
+        if (ColegioCacheLocal.moduloYaPasoHoy(fechaSeleccionada, moduloElegido.horaFin)) {
+            return false
+        }
 
         val detallesExtra = mutableListOf<String>()
         if (esPrioritaria) detallesExtra.add("URGENCIA: $motivoPrioridad")
@@ -139,7 +152,7 @@ class ReservaViewModel(private val repository: ReservaRepository) : ViewModel() 
             nombre = nombreUsuario,
             motivo = motivoUso,
             puesto = obtenerPuestos()[puestoIndex],
-            modulo = obtenerModulos()[moduloIndex],
+            modulo = moduloElegido,
             fecha = fechaSeleccionada,
             reqFlex = requiereFlexibilidad || esPrioritaria,
             motFlex = detallesExtra.joinToString(" | "),

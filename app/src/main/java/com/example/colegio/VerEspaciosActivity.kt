@@ -68,6 +68,10 @@ fun PantallaEspacios(repo: ReservaRepository) {
 
             LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(repo.obtenerPuestos()) { p ->
+                    val modulosVisibles = repo.obtenerModulos().filter { m ->
+                        !ocupados || repo.estadoPuesto(p.id, m.id) is EstadoPuesto.EnUso
+                    }
+
                     Card(
                         colors = CardDefaults.cardColors(containerColor = FondoTarjeta),
                         border = BorderStroke(1.dp, BordeTarjeta),
@@ -85,11 +89,17 @@ fun PantallaEspacios(repo: ReservaRepository) {
                             )
                             HorizontalDivider(color = BordeTarjeta)
 
-                            repo.obtenerModulos().forEach { m ->
-                                val estado = repo.estadoPuesto(p.id, m.id)
-                                val estaOcupado = estado is EstadoPuesto.EnUso
+                            if (modulosVisibles.isEmpty()) {
+                                Text(
+                                    text = "Sin bloques ocupados actualmente.",
+                                    color = TextoSecundario,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            } else {
+                                modulosVisibles.forEach { m ->
+                                    val estado = repo.estadoPuesto(p.id, m.id)
+                                    val estaOcupado = estado is EstadoPuesto.EnUso
 
-                                if (!ocupados || estaOcupado) {
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.SpaceBetween,

@@ -71,8 +71,8 @@ fun PantallaUsuario(viewModel: ReservaViewModel) {
     var menuFechaAbierto by remember { mutableStateOf(false) }
     var menuEvidenciaAbierto by remember { mutableStateOf(false) }
 
-    val puestoSeleccionado = puestos[viewModel.puestoIndex]
-    val moduloSeleccionado = modulos[viewModel.moduloIndex]
+    val puestoSeleccionado = puestos.getOrElse(viewModel.puestoIndex) { puestos.first() }
+    val moduloSeleccionado = modulos.getOrElse(viewModel.moduloIndex) { modulos.first() }
     val fechaSeleccionada = fechasDisponibles.getOrElse(viewModel.fechaIndex) { fechasDisponibles.first() }
     val estadoPuesto = viewModel.obtenerEstadoEnModulo(puestoSeleccionado.id, moduloSeleccionado.id)
 
@@ -266,7 +266,7 @@ fun PantallaUsuario(viewModel: ReservaViewModel) {
             }
 
             item {
-                Text("1. Fecha de Reserva (Solo días hábiles posibles):", style = MaterialTheme.typography.titleSmall, color = TextoPrincipal, fontWeight = FontWeight.Bold)
+                Text("1. Fecha de Reserva (Solo días hábiles):", style = MaterialTheme.typography.titleSmall, color = TextoPrincipal, fontWeight = FontWeight.Bold)
                 Box {
                     OutlinedButton(
                         onClick = { menuFechaAbierto = true },
@@ -306,7 +306,7 @@ fun PantallaUsuario(viewModel: ReservaViewModel) {
                     DropdownMenu(expanded = menuPuestoAbierto, onDismissRequest = { menuPuestoAbierto = false }) {
                         puestos.forEachIndexed { index, puesto ->
                             DropdownMenuItem(
-                                text = { Text("${puesto.nombre} •${puesto.ubicacion}", color = TextoPrincipal) },
+                                text = { Text("${puesto.nombre} • ${puesto.ubicacion}", color = TextoPrincipal) },
                                 onClick = { viewModel.onPuestoSelected(index); menuPuestoAbierto = false }
                             )
                         }
@@ -323,7 +323,7 @@ fun PantallaUsuario(viewModel: ReservaViewModel) {
                         colors = ButtonDefaults.outlinedButtonColors(containerColor = FondoTarjeta, contentColor = TextoPrincipal),
                         border = BorderStroke(1.dp, BordeTarjeta)
                     ) {
-                        Text("${moduloSeleccionado.nombreBloque}:${moduloSeleccionado.rangoTexto}", fontWeight = FontWeight.Medium)
+                        Text("${moduloSeleccionado.nombreBloque}: ${moduloSeleccionado.rangoTexto}", fontWeight = FontWeight.Medium)
                     }
                     DropdownMenu(expanded = menuModuloAbierto, onDismissRequest = { menuModuloAbierto = false }) {
                         modulos.forEachIndexed { index, modulo ->
@@ -525,6 +525,20 @@ fun PantallaUsuario(viewModel: ReservaViewModel) {
                 Text("Mis Solicitudes:", style = MaterialTheme.typography.titleMedium, color = TextoPrincipal, fontWeight = FontWeight.Bold)
             }
 
+            if (misSolicitudes.isEmpty()) {
+                item {
+                    Text(
+                        text = if (viewModel.nombreUsuario.isBlank()) {
+                            "Escribe tu nombre arriba para ver tu historial de solicitudes."
+                        } else {
+                            "Aún no tienes solicitudes registradas."
+                        },
+                        color = TextoSecundario,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+
             items(misSolicitudes, key = { it.id }) { sol ->
                 val colorEstado = when (sol.estado) {
                     EstadoSolicitud.APROBADA -> VerdeBueno
@@ -543,7 +557,7 @@ fun PantallaUsuario(viewModel: ReservaViewModel) {
                         if (sol.esPrioritaria) {
                             Text("🚨 PRIORITARIA / EXCEPCIÓN", color = RojoMalo, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
                         }
-                        Text("${sol.puesto.nombre} •${sol.modulo.rangoTexto}", style = MaterialTheme.typography.titleSmall, color = TextoPrincipal, fontWeight = FontWeight.Bold)
+                        Text("${sol.puesto.nombre} • ${sol.modulo.rangoTexto}", style = MaterialTheme.typography.titleSmall, color = TextoPrincipal, fontWeight = FontWeight.Bold)
                         Text("📅 Fecha: ${sol.fechaReserva}", color = TextoSecundario)
                         Text("Actividad: ${sol.motivoUso}", color = TextoPrincipal)
                         if (sol.tieneFotoAdjunta) Text("📷 Incluye fotografía", color = TealOscuro)

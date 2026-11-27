@@ -544,6 +544,7 @@ fun PantallaUsuario(viewModel: ReservaViewModel) {
                     EstadoSolicitud.APROBADA -> VerdeBueno
                     EstadoSolicitud.RECHAZADA -> RojoMalo
                     EstadoSolicitud.PENDIENTE -> NaranjoPendiente
+                    EstadoSolicitud.FINALIZADA -> TextoSecundario
                 }
                 Card(
                     colors = CardDefaults.cardColors(containerColor = FondoTarjeta),

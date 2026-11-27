@@ -182,14 +182,19 @@ class ReservaViewModel(private val repository: ReservaRepository) : ViewModel() 
     fun obtenerPuestos() = repository.obtenerPuestos()
     fun obtenerModulos() = repository.obtenerModulos()
     fun obtenerSolicitudes() = repository.obtenerSolicitudes()
-    fun obtenerEstadoEnModulo(pId: Int, mId: Int): EstadoPuesto {
-        val fechas = obtenerFechasDisponibles()
-        val fechaActual = fechas.getOrElse(fechaIndex) { fechas.first() }
+    fun obtenerEstadoEnModulo(pId: Int, mId: Int, fecha: String = ""): EstadoPuesto {
+        val fechaActual = if (fecha.isNotBlank()) {
+            fecha
+        } else {
+            val fechas = obtenerFechasDisponibles()
+            fechas.getOrElse(fechaIndex) { fechas.first() }
+        }
         return repository.estadoPuesto(pId, mId, fechaActual)
     }
     fun obtenerFoto(id: Int) = repository.obtenerFoto(id)
     fun aprobarSolicitud(id: Int) = repository.aprobarSolicitud(id)
     fun rechazarSolicitud(id: Int) = repository.rechazarSolicitud(id)
-    fun adminsPendientes() = repository.getAdminsPendientes()
-    fun aprobarAdmin(c: String) = repository.aprobarAdmin(c)
+    fun usuariosPendientes() = repository.getUsuariosPendientes()
+    fun aprobarUsuario(c: String) = repository.aprobarUsuario(c)
+    fun rechazarUsuario(c: String) = repository.rechazarUsuario(c)
 }

@@ -25,12 +25,12 @@ class ReservaRepository(private val context: Context) {
     fun sincronizarTodo() {
         scopeRed.launch {
             try {
-                val anioActual = ColegioCacheLocal.calendarioChile().get(Calendar.YEAR)
+                val anioActual = Calendar.getInstance().get(Calendar.YEAR)
                 val feriados = RetrofitClient.feriadosApi.obtenerFeriadosChile(anioActual)
                 ColegioCacheLocal.feriadosChile = feriados.map { it.date }.toSet()
                 Log.d("API_EXTERNA", "Feriados cargados: ${feriados.size}")
             } catch (e: Exception) {
-                Log.w("API_EXTERNA", "Sin conexión a API de feriados, usando solo fin de semana: ${e.message}")
+                Log.w("API_EXTERNA", "Sin conexión a API de feriados: ${e.message}")
             }
 
             try {
@@ -70,7 +70,7 @@ class ReservaRepository(private val context: Context) {
                             tieneFotoAdjunta = dto.tieneFotoAdjunta,
                             estado = runCatching { EstadoSolicitud.valueOf(dto.estado) }
                                 .getOrDefault(EstadoSolicitud.PENDIENTE),
-                            fechaReserva = ColegioCacheLocal.limpiarFechaBase(dto.fechaReserva),
+                            fechaReserva = dto.fechaReserva,
                             esPrioritaria = dto.esPrioritaria,
                             documentoAdjunto = dto.documentoAdjunto
                         )
@@ -92,9 +92,9 @@ class ReservaRepository(private val context: Context) {
 
     fun registrar(correo: String, pass: String, rol: String): String {
         if (correo.isBlank() || pass.isBlank()) return "Llena todos los campos"
-        if (ColegioCacheLocal.usuarios.any { it.correo == correo }) return "El correo ya existe"
+        if (ColegioCacheLocal.usuarios.any { it.correo == correo.trim() }) return "El correo ya existe"
 
-        val nuevo = Usuario(correo.trim(), pass, rol, rol == "DOCENTE")
+        val nuevo = Usuario(correo.trim(), pass, rol, false)
         ColegioCacheLocal.usuarios.add(nuevo)
         ColegioCacheLocal.guardarUsuarios(context)
 
@@ -110,9 +110,9 @@ class ReservaRepository(private val context: Context) {
         return "OK"
     }
 
-    fun getAdminsPendientes() = ColegioCacheLocal.usuarios.filter { it.rol == "ADMIN" && !it.aprobado }
+    fun getUsuariosPendientes() = ColegioCacheLocal.usuarios.filter { !it.aprobado }
 
-    fun aprobarAdmin(correo: String) {
+    fun aprobarUsuario(correo: String) {
         val i = ColegioCacheLocal.usuarios.indexOfFirst { it.correo == correo }
         if (i != -1) {
             ColegioCacheLocal.usuarios[i] = ColegioCacheLocal.usuarios[i].copy(aprobado = true)
@@ -122,7 +122,23 @@ class ReservaRepository(private val context: Context) {
                 try {
                     RetrofitClient.colegioApi.aprobarAdmin(correo)
                 } catch (e: Exception) {
-                    Log.w("API_SPRING", "Aprobación admin guardada solo en SQLite: ${e.message}")
+                    Log.w("API_SPRING", "Aprobación guardada solo en SQLite: ${e.message}")
+                }
+            }
+        }
+    }
+
+    fun rechazarUsuario(correo: String) {
+        val i = ColegioCacheLocal.usuarios.indexOfFirst { it.correo == correo }
+        if (i != -1) {
+            ColegioCacheLocal.usuarios.removeAt(i)
+            ColegioCacheLocal.guardarUsuarios(context)
+
+            scopeRed.launch {
+                try {
+                    RetrofitClient.colegioApi.eliminarUsuario(correo)
+                } catch (e: Exception) {
+                    Log.w("API_SPRING", "Rechazo guardado solo en SQLite: ${e.message}")
                 }
             }
         }
@@ -135,12 +151,18 @@ class ReservaRepository(private val context: Context) {
     fun obtenerFechasPosibles(esPrioritaria: Boolean) = ColegioCacheLocal.obtenerFechasPosibles(esPrioritaria)
 
     fun estadoPuesto(puestoId: Int, moduloId: Int, fecha: String = ""): EstadoPuesto {
-        val fechaLimpia = ColegioCacheLocal.limpiarFechaBase(fecha)
+        val hoyIso = ColegioCacheLocal.obtenerFechaHoyIso()
+        val fechaConsulta = if (fecha.isBlank()) hoyIso else fecha
+
+        if (fechaConsulta < hoyIso) {
+            return EstadoPuesto.Disponible
+        }
+
         val aprobada = ColegioCacheLocal.solicitudes.find {
             it.puesto.id == puestoId &&
                     it.modulo.id == moduloId &&
                     it.estado == EstadoSolicitud.APROBADA &&
-                    (fechaLimpia.isEmpty() || ColegioCacheLocal.limpiarFechaBase(it.fechaReserva) == fechaLimpia)
+                    it.fechaReserva == fechaConsulta
         }
         return if (aprobada != null) {
             EstadoPuesto.EnUso(aprobada.nombreUsuario, aprobada.motivoUso, aprobada.motivoFlexibilidad)
@@ -161,8 +183,7 @@ class ReservaRepository(private val context: Context) {
         foto: Bitmap?,
         documento: String
     ): Boolean {
-        val fechaLimpia = ColegioCacheLocal.limpiarFechaBase(fecha)
-        if (estadoPuesto(puesto.id, modulo.id, fechaLimpia) is EstadoPuesto.EnUso) return false
+        if (estadoPuesto(puesto.id, modulo.id, fecha) is EstadoPuesto.EnUso) return false
         val idLocal = ColegioCacheLocal.generarId()
         if (foto != null) ColegioCacheLocal.fotosCapturadas[idLocal] = foto
 
@@ -176,7 +197,7 @@ class ReservaRepository(private val context: Context) {
             motivoFlexibilidad = motFlex,
             tieneFotoAdjunta = foto != null,
             estado = EstadoSolicitud.PENDIENTE,
-            fechaReserva = fechaLimpia,
+            fechaReserva = fecha,
             esPrioritaria = esPrioritaria,
             documentoAdjunto = documento
         )

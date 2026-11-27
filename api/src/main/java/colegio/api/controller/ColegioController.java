@@ -41,11 +41,20 @@ public class ColegioController {
     }
 
     @PutMapping("/usuarios/{correo}/aprobar")
-    public ResponseEntity<UsuarioEntity> aprobarAdmin(@PathVariable String correo) {
+    public ResponseEntity<UsuarioEntity> aprobarUsuario(@PathVariable String correo) {
         return usuarioRepo.findById(correo).map(u -> {
             u.setAprobado(true);
             return ResponseEntity.ok(usuarioRepo.save(u));
         }).orElse(ResponseEntity.notFound().build());
+    }
+
+    @DeleteMapping("/usuarios/{correo}")
+    public ResponseEntity<Void> eliminarUsuario(@PathVariable String correo) {
+        if (!usuarioRepo.existsById(correo)) {
+            return ResponseEntity.notFound().build();
+        }
+        usuarioRepo.deleteById(correo);
+        return ResponseEntity.noContent().build();
     }
 
     private void actualizarReservasVencidas() {

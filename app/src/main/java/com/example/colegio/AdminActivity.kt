@@ -16,13 +16,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.colegio.data.ColegioCacheLocal
 import com.example.colegio.data.ReservaRepository
 import com.example.colegio.model.EstadoSolicitud
 import com.example.colegio.ui.theme.*
@@ -82,46 +82,68 @@ fun PantallaAdmin(vm: ReservaViewModel) {
                 HorizontalDivider(Modifier.padding(vertical = 8.dp), color = BordeTarjeta)
             }
 
-            val pendientes = vm.adminsPendientes()
+            val pendientes = vm.usuariosPendientes()
             if (pendientes.isNotEmpty()) {
                 item {
                     Text(
-                        text = "⚠️ Admins por Aprobar (${pendientes.size})",
+                        text = "⚠️ Usuarios por Aprobar (${pendientes.size})",
                         color = RojoMalo,
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.titleMedium
                     )
                 }
-                items(pendientes, key = { it.correo }) { admin ->
+                items(pendientes, key = { it.correo }) { usuario ->
                     Card(
                         colors = CardDefaults.cardColors(containerColor = FondoTarjeta),
                         border = BorderStroke(1.5.dp, RojoMalo),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Row(
+                        Column(
                             modifier = Modifier
                                 .padding(16.dp)
                                 .fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(
-                                text = admin.correo,
+                                text = usuario.correo,
                                 color = TextoPrincipal,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.weight(1f)
+                                fontWeight = FontWeight.Bold
                             )
-                            Button(
-                                onClick = {
-                                    vm.aprobarAdmin(admin.correo)
-                                    Toast.makeText(ctx, "Administrador autorizado", Toast.LENGTH_SHORT).show()
-                                },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = VerdeBueno,
-                                    contentColor = Color.White
-                                )
-                            ) {
-                                Text("Autorizar", fontWeight = FontWeight.Bold)
+                            Text(
+                                text = "Rol solicitado: ${usuario.rol}",
+                                color = TextoSecundario,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Row(modifier = Modifier.fillMaxWidth()) {
+                                Button(
+                                    onClick = {
+                                        vm.aprobarUsuario(usuario.correo)
+                                        Toast.makeText(ctx, "Usuario autorizado", Toast.LENGTH_SHORT).show()
+                                    },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = VerdeBueno,
+                                        contentColor = Color.White
+                                    ),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("Autorizar", fontWeight = FontWeight.Bold)
+                                }
+
+                                Spacer(Modifier.width(8.dp))
+
+                                Button(
+                                    onClick = {
+                                        vm.rechazarUsuario(usuario.correo)
+                                        Toast.makeText(ctx, "Solicitud denegada", Toast.LENGTH_SHORT).show()
+                                    },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = RojoMalo,
+                                        contentColor = Color.White
+                                    ),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("Denegar", fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
                     }
@@ -154,6 +176,7 @@ fun PantallaAdmin(vm: ReservaViewModel) {
                         EstadoSolicitud.PENDIENTE -> FondoTarjeta
                         EstadoSolicitud.APROBADA -> VerdeFondo
                         EstadoSolicitud.RECHAZADA -> RojoFondo
+                        EstadoSolicitud.FINALIZADA -> FondoTarjeta
                     },
                     label = "animColor"
                 )
@@ -161,6 +184,7 @@ fun PantallaAdmin(vm: ReservaViewModel) {
                     EstadoSolicitud.PENDIENTE -> NaranjoPendiente
                     EstadoSolicitud.APROBADA -> VerdeBueno
                     EstadoSolicitud.RECHAZADA -> RojoMalo
+                    EstadoSolicitud.FINALIZADA -> BordeTarjeta
                 }
 
                 Card(
@@ -179,7 +203,11 @@ fun PantallaAdmin(vm: ReservaViewModel) {
                             style = MaterialTheme.typography.titleMedium
                         )
                         Text("Profesor: ${s.nombreUsuario} | Actividad: ${s.motivoUso}", color = TextoPrincipal)
-                        Text("📅 Fecha: ${s.fechaReserva}", color = TextoSecundario, fontWeight = FontWeight.Medium)
+                        Text(
+                            text = "📅 Fecha: ${ColegioCacheLocal.formatearFechaVisual(s.fechaReserva, s.esPrioritaria)}",
+                            color = TextoSecundario,
+                            fontWeight = FontWeight.Medium
+                        )
 
                         if (s.esPrioritaria) {
                             Surface(
@@ -214,6 +242,7 @@ fun PantallaAdmin(vm: ReservaViewModel) {
                                 EstadoSolicitud.APROBADA -> VerdeBueno
                                 EstadoSolicitud.RECHAZADA -> RojoMalo
                                 EstadoSolicitud.PENDIENTE -> NaranjoPendiente
+                                EstadoSolicitud.FINALIZADA -> TextoSecundario
                             },
                             shape = RoundedCornerShape(6.dp)
                         ) {

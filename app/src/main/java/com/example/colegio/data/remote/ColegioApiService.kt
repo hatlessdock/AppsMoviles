@@ -1,6 +1,7 @@
 package com.example.colegio.data.remote
 
 import retrofit2.http.*
+import retrofit2.Response
 
 data class UsuarioDto(
     val correo: String,
@@ -45,4 +46,7 @@ interface ColegioApiService {
         @Path("id") id: Int,
         @Query("estado") estado: String
     ): SolicitudDto
+
+    @DELETE("api/usuarios/{correo}")
+    suspend fun eliminarUsuario(@Path("correo") correo: String): Response<Unit>
 }

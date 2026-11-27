@@ -7,6 +7,8 @@ import colegio.api.repository.UsuarioRepository;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 
@@ -22,7 +24,7 @@ public class ColegioController {
         this.usuarioRepo = usuarioRepo;
         this.solicitudRepo = solicitudRepo;
     }
-    
+
     @GetMapping("/health")
     public Map<String, String> health() {
         return Map.of("estado", "ok");
@@ -46,8 +48,30 @@ public class ColegioController {
         }).orElse(ResponseEntity.notFound().build());
     }
 
+    private void actualizarReservasVencidas() {
+        LocalDate hoy = LocalDate.now(ZoneId.of("America/Santiago"));
+        List<SolicitudEntity> todas = solicitudRepo.findAll();
+
+        for (SolicitudEntity s : todas) {
+            String f = s.getFechaReserva();
+            if (f != null && f.matches("\\d{4}-\\d{2}-\\d{2}")) {
+                LocalDate fecha = LocalDate.parse(f);
+                if (fecha.isBefore(hoy)) {
+                    if ("APROBADA".equals(s.getEstado())) {
+                        s.setEstado("FINALIZADA");
+                        solicitudRepo.save(s);
+                    } else if ("PENDIENTE".equals(s.getEstado())) {
+                        s.setEstado("RECHAZADA");
+                        solicitudRepo.save(s);
+                    }
+                }
+            }
+        }
+    }
+
     @GetMapping("/solicitudes")
     public List<SolicitudEntity> listarSolicitudes() {
+        actualizarReservasVencidas();
         return solicitudRepo.findAll();
     }
 

@@ -9,6 +9,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -17,6 +18,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.example.colegio.data.ReservaRepository
@@ -34,6 +37,7 @@ class MainActivity : ComponentActivity() {
                     color = FondoApp
                 ) {
                     PantallaLogin(vm, onLogin = { rol ->
+                        vm.onPass("")
                         if (rol == "ADMIN") startActivity(Intent(this, AdminActivity::class.java))
                         else startActivity(Intent(this, UsuarioActivity::class.java))
                     })
@@ -92,6 +96,10 @@ fun PantallaLogin(vm: LoginViewModel, onLogin: (String) -> Unit) {
                     onValueChange = { vm.onCorreo(it) },
                     label = { Text("Correo institucional") },
                     singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Email,
+                        imeAction = ImeAction.Next
+                    ),
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(Modifier.height(14.dp))
@@ -101,6 +109,10 @@ fun PantallaLogin(vm: LoginViewModel, onLogin: (String) -> Unit) {
                     label = { Text("Contraseña") },
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Password,
+                        imeAction = ImeAction.Done
+                    ),
                     modifier = Modifier.fillMaxWidth()
                 )
 

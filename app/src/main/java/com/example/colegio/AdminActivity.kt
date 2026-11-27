@@ -41,6 +41,8 @@ class AdminActivity : ComponentActivity() {
 @Composable
 fun PantallaAdmin(vm: ReservaViewModel) {
     val ctx = LocalContext.current
+    val solicitudes = vm.obtenerSolicitudes()
+
     Scaffold(
         containerColor = FondoApp,
         topBar = {
@@ -112,7 +114,7 @@ fun PantallaAdmin(vm: ReservaViewModel) {
                             Button(
                                 onClick = {
                                     vm.aprobarAdmin(admin.correo)
-                                    Toast.makeText(ctx, "Autorizado", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(ctx, "Administrador autorizado", Toast.LENGTH_SHORT).show()
                                 },
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = VerdeBueno,
@@ -136,7 +138,17 @@ fun PantallaAdmin(vm: ReservaViewModel) {
                 )
             }
 
-            items(vm.obtenerSolicitudes(), key = { it.id }) { s ->
+            if (solicitudes.isEmpty()) {
+                item {
+                    Text(
+                        text = "No hay solicitudes registradas por el momento.",
+                        color = TextoSecundario,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+
+            items(solicitudes, key = { it.id }) { s ->
                 val colorFondo by animateColorAsState(
                     targetValue = when (s.estado) {
                         EstadoSolicitud.PENDIENTE -> FondoTarjeta
@@ -161,7 +173,7 @@ fun PantallaAdmin(vm: ReservaViewModel) {
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Text(
-                            text = "${s.puesto.nombre} -${s.modulo.rangoTexto}",
+                            text = "${s.puesto.nombre} - ${s.modulo.rangoTexto}",
                             color = TextoPrincipal,
                             fontWeight = FontWeight.Bold,
                             style = MaterialTheme.typography.titleMedium
@@ -219,8 +231,12 @@ fun PantallaAdmin(vm: ReservaViewModel) {
                                 Button(
                                     onClick = {
                                         vm.aprobarSolicitud(s.id)
-                                        RecursosNativosHelper.mostrarNotificacionReserva(ctx, "Aprobada", "Bloqueado")
-                                        Toast.makeText(ctx, "Aprobada", Toast.LENGTH_SHORT).show()
+                                        RecursosNativosHelper.mostrarNotificacionReserva(
+                                            ctx,
+                                            "Reserva aprobada",
+                                            "El espacio ha sido confirmado y bloqueado."
+                                        )
+                                        Toast.makeText(ctx, "Solicitud aprobada", Toast.LENGTH_SHORT).show()
                                     },
                                     colors = ButtonDefaults.buttonColors(
                                         containerColor = VerdeBueno,
@@ -236,7 +252,7 @@ fun PantallaAdmin(vm: ReservaViewModel) {
                                 Button(
                                     onClick = {
                                         vm.rechazarSolicitud(s.id)
-                                        Toast.makeText(ctx, "Rechazada", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(ctx, "Solicitud rechazada", Toast.LENGTH_SHORT).show()
                                     },
                                     colors = ButtonDefaults.buttonColors(
                                         containerColor = RojoMalo,
